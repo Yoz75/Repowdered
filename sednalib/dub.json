@@ -1,0 +1,18 @@
+{
+	"authors": [
+		"yoz75"
+	],
+	"license": "BSL-1.0",
+	"copyright": "Copyright © 2026, yoz75",
+	"name": "sednalib",
+	"libs": [
+		"raylib"
+	],
+	"description": "Sedna Library is a simple library for handling windows, graphics and IO (init a window, drawing sprites, using compute shaders etc). It uses raylib as backend",
+	"dependencies": {
+		"raylib-d": "~>5.5.3",
+		"jsonizer": "~>0.7.7",
+		"fluid": "~>0.8.6"
+	},
+	"targetType": "library"
+}

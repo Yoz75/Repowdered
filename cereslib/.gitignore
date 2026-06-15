@@ -1,0 +1,17 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/cereslib
+cereslib.so
+cereslib.dylib
+cereslib.dll
+libcereslib.a
+cereslib.a
+cereslib.lib
+cereslib-test-*
+*.exe
+*.pdb
+*.o
+*.obj
+*.lst

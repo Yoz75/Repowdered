@@ -1,0 +1,13 @@
+{
+	"description": "Ceres Library is a dwarf library that contains various utils that does not exist in Phobos (or I need other implementation). All generic stuff goes here.",
+	"dependencies": {
+		"jsonizer": "~>0.7.7",
+		"colorize": "~>1.0.5"
+	},
+	"authors": [
+		"yoz75"
+	],
+	"copyright": "Copyright © 2026, yoz75",
+	"license": "BSL-1.0",
+	"name": "cereslib"
+}

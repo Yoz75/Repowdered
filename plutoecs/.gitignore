@@ -1,0 +1,17 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/plutoecs
+plutoecs.so
+plutoecs.dylib
+plutoecs.dll
+libplutoecs.a
+plutoecs.a
+plutoecs.lib
+plutoecs-test-*
+*.exe
+*.pdb
+*.o
+*.obj
+*.lst

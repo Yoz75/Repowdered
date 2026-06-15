@@ -1,0 +1,17 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/sednalib
+sednalib.so
+sednalib.dylib
+sednalib.dll
+libsednalib.a
+sednalib.a
+sednalib.lib
+sednalib-test-*
+*.exe
+*.pdb
+*.o
+*.obj
+*.lst

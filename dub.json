@@ -1,0 +1,53 @@
+{
+	"authors": [
+		"yoz75"
+	],
+	"subPackages": [
+		"plutoecs",
+		"sednalib",
+		"cereslib"
+	],
+	"license": "MIT",
+	"targetPath": "./bin/",
+	"dflags": [
+		"-J ./resources/compiletime/",
+		"-g"
+	],
+	"name": "repowdered",
+	"copyFiles": [
+		"resources/runtime/settings/",
+		"resources/runtime/particles/",
+		"raylib.dll"
+	],
+	"libs": [
+		"raylib"
+	],
+	"copyright": "Copyright © 2026, yoz75",
+	"description": "A game about powders and physics",
+	"dependencies": {
+		"repowdered:plutoecs": "*",
+		"raylib-d": "~>5.5.3",
+		"repowdered:cereslib": "*",
+		"repowdered:sednalib": "*"
+	},
+	"buildTypes": {
+		"release-lto": {
+			"dflags": [
+				"--boundscheck=off",
+				"--enable-asserts=false",
+				"--enable-invariants=false",
+				"-O3",
+				"-flto=full",
+				"-defaultlib=phobos2-ldc-lto,druntime-ldc-lto"
+			]
+		},
+		"release": {
+			"dflags": [
+				"--boundscheck=off",
+				"--enable-asserts=false",
+				"--enable-invariants=false",
+				"-O3"
+			]
+		}
+	}
+}

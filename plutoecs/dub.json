@@ -1,0 +1,13 @@
+{
+	"authors": [
+		"yoz75"
+	],
+	"license": "BSL-1.0",
+	"copyright": "Copyright © 2026, yoz75",
+	"name": "plutoecs",
+	"description": "Pluto ECS is a simple dwarf ECS library",
+	"dependencies": {
+		"dlib": "~>1.4.1"
+	},
+	"targetType": "library"
+}
