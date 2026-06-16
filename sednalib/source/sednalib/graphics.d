@@ -20,7 +20,10 @@ public mixin template SednaImage()
     float rotation = 0;
             
     /// The position of the image.
-    float[2] position = [0, 0];    
+    float[2] position = [0, 0];
+
+    /// The image shader. Null means no custom shader appllied
+    BasicShader shader;
 
     private Image image;
     private Texture texture;
@@ -32,8 +35,14 @@ public mixin template SednaImage()
         texture = LoadTextureFromImage(image);
     }
 
+    pragma(inline, true)
     @property int width() inout => texture.width;
+
+    pragma(inline, true)
     @property int height() inout => texture.height;
+    
+    pragma(inline, true)
+    @property int[2] resolution() inout => [width(), height()];
 
     void setPixel(int[2] position, Color32 color)
     {
@@ -59,9 +68,10 @@ public struct Sprite
 public:
 
     /// Draw the sprite
-    void draw()
+    void draw() inout
     {
         BeginMode2D(globalWindowInstance.activeCamera);
+        if(shader !is null) shader.enable();
 
         immutable source = Rectangle(0, 0, texture.width, texture.height);
         immutable auto destination = Rectangle(position[0], position[1], 
@@ -71,7 +81,8 @@ public:
         immutable auto origin = Vector2(origin[0], origin[1]);
         DrawTexturePro(texture, source, destination, origin, rotation, cast(raylib.Color) color);
 
-        EndMode2D();   
+        if(shader !is null) shader.disable();
+        EndMode2D();
     }
 }
 
@@ -83,7 +94,7 @@ public struct ScreenImage
 
 public:
     /// Draw the image at relative screen position
-    void drawAtRelativeScreenPosition()
+    void drawAtRelativeScreenPosition() inout
     {
         auto absolutePosition = relativeScreenPos2ScreenPos(position, globalWindowInstance.getResolution());
         drawAtScreenPosition(absolutePosition);
@@ -92,8 +103,10 @@ public:
     /// Draw the image at absolute position
     /// Params:
     ///   position = the absolute screen position of sprite's origin
-    void drawAtScreenPosition(int[2] position)
+    void drawAtScreenPosition(int[2] position) inout
     {
+        if(shader !is null) shader.enable();
+
         immutable source = Rectangle(0, 0, texture.width, texture.height);
         immutable auto destination = Rectangle(position[0], position[1], 
         texture.width * scale[0], 
@@ -101,6 +114,8 @@ public:
 
         immutable auto origin = Vector2(origin[0], origin[1]);
         DrawTexturePro(texture, source, destination, origin, rotation, cast(raylib.Color) color);
+
+        if(shader !is null) shader.enable();
     }
 }
 
@@ -242,7 +257,7 @@ public final class ShaderBuffer
     }
 }
 
-/// A program executed on GPU
+/// A program executed on GPU handling sprite
 public final class BasicShader : IShader
 {
     private Shader shader;
@@ -291,14 +306,15 @@ public final class BasicShader : IShader
         attachedBuffers.remove(bindingIndex);
     }
 
-    /// Begin current shader mode
-    void beginMode()
+    /// Enable the shader (will apply to all rendered images)
+    void enable() inout
     {
-        BeginShaderMode(shader);
+        // we know that `BeginShaderMode` changes nothing
+        BeginShaderMode(cast() shader);
     }
     
-    /// End current shader mdoe
-    void endMode()
+    /// Disable shader (see `enable()`)
+    void disable() inout
     {
         EndShaderMode();
     }
@@ -321,7 +337,7 @@ public final class BasicShader : IShader
     }
 }
 
-/// A program executed on GPU
+/// A program executed on GPU processing some data
 public final class ComputeShader : IShader
 {
     private uint glID;
