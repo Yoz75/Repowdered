@@ -24,6 +24,8 @@ static:
     private __gshared Queue!SednaTask onceTasks;
     private __gshared Queue!SednaTask onceUITasks;
     private __gshared bool isWindowClosed;
+    private __gshared bool isWindowInitialized;
+    private __gshared Object pipelineMonitor = new Object;
 
     ~this()
     {
@@ -39,6 +41,18 @@ static:
         immutable settings = Settings.windowSettings;
 
         spawn(&renderThread, settings);
+
+        while(true)
+        {
+            bool initialized;
+            synchronized(pipelineMonitor)
+            {
+                initialized = isWindowInitialized;
+            }
+            if(initialized)
+                break;
+        }
+
         addOnceRenderTask((window) => window.setMaxFPS(settings.maxFPS));
     }
 
@@ -47,7 +61,10 @@ static:
     ///   task = the task
     void addRenderTask(SednaTask task)
     {
-        tasks.insertBack(task);
+        synchronized(pipelineMonitor)
+        {
+            tasks.insertBack(task);
+        }
     }
 
     /// Add a permanent sedna task that should be called at UI stage (remember that UI renders automatically, use this for mutability etc)
@@ -55,7 +72,10 @@ static:
     ///   uiTask = the task
     void addUITask(SednaTask uiTask)
     {
-        uiTasks.insertBack(uiTask);
+        synchronized(pipelineMonitor)
+        {
+            uiTasks.insertBack(uiTask);
+        }
     }
 
     /// Add a task that should be called once. They are called before permanent tasks
@@ -63,19 +83,33 @@ static:
     ///   task = the task
     void addOnceRenderTask(SednaTask task)
     {
-        onceTasks.enqueue(task);
+        synchronized(pipelineMonitor)
+        {
+            onceTasks.enqueue(task);
+        }
     }
 
     /// Add a UI task that should be called once. They are called before permanent UI tasks
     /// Params:
-    ///   task = the task
+    ///   uiTask = the task
     void addOnceUITask(SednaTask uiTask)
     {
-        onceTasks.enqueue(uiTask);
+        synchronized(pipelineMonitor)
+        {
+            onceUITasks.enqueue(uiTask);
+        }
     }
 
     /// Is pipeline ended its work?
-    bool isPipelineStopped() => isWindowClosed;
+    bool isPipelineStopped()
+    {
+        bool closed;
+        synchronized(pipelineMonitor)
+        {
+            closed = isWindowClosed;
+        }
+        return closed;
+    }
 
     private void renderThread(WindowSettigns settings)
     {
@@ -85,37 +119,76 @@ static:
             settings.title ~ ' ' ~ programVersion.toString() ~ "\0");
 
             window.setBackgroundColor(settings.backgroundColor);
-
             auto rootTheme = Theme(rule!Frame(Rule.backgroundColor = color("#00000000")));
-
             window.uiRoot = vframe(.layout!("fill"));
             window.uiRoot.theme = rootTheme;
+
+            synchronized(pipelineMonitor)
+            {
+                isWindowInitialized = true;
+            }
+
             while(!window.shouldClose)
             {
                 window.startFrame();
                 window.clearScreen();
 
-                while(!onceTasks.empty)
+                while(true)
                 {
-                    auto head = onceTasks.dequeue();
+                    SednaTask head;
+                    synchronized(pipelineMonitor)
+                    {
+                        if(onceTasks.empty)
+                        {
+                            head = null;
+                        }
+                        else
+                        {
+                            head = onceTasks.dequeue();
+                        }
+                    }
+
+                    if(head is null)
+                        break;
+
                     head(window);
                 }
 
-                foreach(task; tasks)
+                synchronized(pipelineMonitor)
                 {
-                    task(window);
+                    foreach(task; tasks)
+                    {
+                        task(window);
+                    }
                 }
 
-                while(!onceUITasks.empty)
+                while(true)
                 {
-                    auto head = onceTasks.dequeue();
+                    SednaTask head;
+                    synchronized(pipelineMonitor)
+                    {
+                        if(onceUITasks.empty)
+                        {
+                            head = null;
+                        }
+                        else
+                        {
+                            head = onceUITasks.dequeue();
+                        }
+                    }
+
+                    if(head is null)
+                        break;
+
                     head(window);
                 }
 
-
-                foreach(task; uiTasks)
+                synchronized(pipelineMonitor)
                 {
-                    task(window);
+                    foreach(task; uiTasks)
+                    {
+                        task(window);
+                    }
                 }
 
                 window.uiRoot.draw();
@@ -123,7 +196,10 @@ static:
             }
 
             window.close();
-            isWindowClosed = true;
+            synchronized(pipelineMonitor)
+            {
+                isWindowClosed = true;
+            }
         }
         catch(Throwable ex) // "Catching Error or Throwable is almost always a bad idea."... Bro I literally kill my program instantly after this happens
         {

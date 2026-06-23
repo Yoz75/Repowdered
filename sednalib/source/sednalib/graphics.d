@@ -191,9 +191,9 @@ public interface IShader
     /// Attach a GPU buffer to a shader. You can attach a single buffer to multiple shaders
     /// Params:
     /// shader = the shader
-    /// buffer = the attach buffer
+    /// bufferId = the internal id of the buffer
     /// bindingIndex = the binding index of buffer in shader's code
-    void attachBuffer(ShaderBuffer buffer, uint bindingIndex);
+    void attachBuffer(uint bufferId, uint bindingIndex);
 
     /// Detach a buffer from a shader
     /// Params:
@@ -210,23 +210,24 @@ public interface IShader
 }
 
 /// A buffer allocated on GPU
-public final class ShaderBuffer
+public final class ShaderBuffer(T)
 {
     private uint glID;
     
     /// Initialize this buffer
     /// Params:
-    /// size = size of buffer in bytes
+    /// size = size of the buffer
     /// data = the initial data of buffer, if `data` == null, buffer won't be initialized
     /// hint = hint that tells driver how we'll use our buffer
-    void initMe(uint size, void* data, BufferUsageHint hint)
+    void initMe(uint size, T[] data, BufferUsageHint hint)
     {
-        glID = rlLoadShaderBuffer(size, data, hint);
+        immutable byteSize = cast(uint) (size * T.sizeof);
+        glID = rlLoadShaderBuffer(byteSize, data.ptr, hint);
         checkErrors();
     }
 
     /// Get internal id of the buffer
-    uint getInternalID() => glID;
+    uint internalId() => glID;
 
     /// Free GPU resources of the buffer
     void free()
@@ -290,11 +291,11 @@ public final class BasicShader : IShader
     /// Attach a GPU buffer to a shader. You can attach a single buffer to multiple shaders
     /// Params:
     /// shader = the shader
-    /// buffer = the attach buffer
-    /// index = the index of buffer in shader's code
-    void attachBuffer(ShaderBuffer buffer, uint bindingIndex)
+    /// bufferId = the internal id of the buffer
+    /// bindingIndex = the binding index of buffer in shader's code
+    void attachBuffer(uint bufferId, uint bindingIndex)
     {
-        attachedBuffers[bindingIndex] = buffer.getInternalID();
+        attachedBuffers[bindingIndex] = bufferId;
     }
 
     /// Detach a buffer from a shader
@@ -306,11 +307,14 @@ public final class BasicShader : IShader
         attachedBuffers.remove(bindingIndex);
     }
 
-    /// Enable the shader (will apply to all rendered images)
     void enable() inout
     {
-        // we know that `BeginShaderMode` changes nothing
         BeginShaderMode(cast() shader);
+
+        foreach(bindingIndex, bufferId; attachedBuffers)
+        {
+            rlBindShaderBuffer(bufferId, bindingIndex);
+        }
     }
     
     /// Disable shader (see `enable()`)
@@ -371,11 +375,11 @@ public final class ComputeShader : IShader
     /// Attach a GPU buffer to a shader. You can attach a single buffer to multiple shaders
     /// Params:
     /// shader = the shader
-    /// buffer = the attach buffer
-    /// index = the index of buffer in shader's code
-    void attachBuffer(ShaderBuffer buffer, uint bindingIndex)
+    /// bufferId = the internal id of the buffer
+    /// bindingIndex = the binding index of buffer in shader's code
+    void attachBuffer(uint bufferId, uint bindingIndex)
     {
-        attachedBuffers[bindingIndex] = buffer.getInternalID();
+        attachedBuffers[bindingIndex] = bufferId;
     }
 
     /// Detach a buffer from a shader

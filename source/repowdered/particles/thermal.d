@@ -1,19 +1,14 @@
 /// Thermal phenomena
 module repowdered.particles.thermal;
 
-module powders.particle.temperature;
-
-import kernel.ecs;
-import powders.io;
-import powders.particle.register;
-import powders.particle.basics;
-import powders.map;
-import powders.rendering;
+import repowdered.particles.register;
+import repowdered.map;
+import repowdered.particles.rendering;
+import plutoecs;
+import cereslib.jsonutils;
 
 // Number type used for heat and temperature
 alias TemperatureScalar = float;
-
-package Temperature2ColorConverter temperature2ColorConverter;
 
 public pure TemperatureScalar conductivity2coefficient(TemperatureScalar conductivity, 
     TemperatureScalar scale, TemperatureScalar maxConductivity)
@@ -23,7 +18,7 @@ public pure TemperatureScalar conductivity2coefficient(TemperatureScalar conduct
     return(log(1 + scale * conductivity)) / (log(scale * maxConductivity));
 }
 
-@Component(OnDestroyAction.setInit, OnAddAction.recreate) public struct Temperature
+@scomponent public struct Temperature
 {
     mixin MakeJsonizable;
 
@@ -66,7 +61,7 @@ public:
 }
 
 /// A Kostyl, that's needed to increase or decrease temperature
-public @Component(OnDestroyAction.destroy) struct DeltaTemperature
+public @scomponent struct DeltaTemperature
 {
     mixin MakeJsonizable;
 public:
@@ -75,7 +70,7 @@ public:
 }
 
 /// Something that turns into something other when temperature more than critical point
-public @Component(OnDestroyAction.destroy) struct Meltable
+public @scomponent struct Meltable
 {
     mixin MakeJsonizable;
 public:
@@ -84,7 +79,7 @@ public:
 }
 
 /// Something that turns into something other when temperature less than critical point
-public @Component(OnDestroyAction.destroy) struct Solidable
+public @scomponent struct Solidable
 {
     mixin MakeJsonizable;
 public:
@@ -92,12 +87,12 @@ public:
     @JsonizeField TemperatureScalar criticalTemperature;
 }
 
-public @Component(OnDestroyAction.destroy) struct Convection
+public @scomponent struct Convection
 {
     mixin MakeJsonizable;
 public:
 }
-
+/*
 import kernel.todo;
 mixin TODO!("Currently TemperatureSystem is broken when process ambient heat, fix later!");
 public class TemperatureSystem : System!Temperature
@@ -518,4 +513,4 @@ public pure Color lerp(T)(immutable Color from, immutable Color to, immutable T 
     result.a = cast(ubyte)(from.a + (to.a - from.a) * lerpFactor);
 
     return result;
-}
+}*/

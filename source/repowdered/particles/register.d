@@ -16,7 +16,7 @@ struct Dummy
 public __gshared Dummy[string] globalComponents;
 
 /// Default modules, that contain components
-public alias defaultModules = AliasSeq!(repowdered.particles.rendering, repowdered.particles.meta,
+public alias defaultModules = AliasSeq!(repowdered.particles.rendering.components, repowdered.particles.meta,
  repowdered.particles.mechanics);
 
 /// Serializable component. This attribute marks component as serializable (i.e user can add it to a custom type, added or deleted by `buildParticle` and `destroyParticle`)
