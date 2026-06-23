@@ -614,3 +614,12 @@ public final class InputActionResolver
         throw new Exception("Input action is null or not contained in the resolver!");
     }
 }
+
+/// Is action active? Assumes action's state can never be `InputActionState.none`
+/// Params:
+/// action = the action to be checked
+/// Returns: true if action state is not `InputActionState.unactive``
+public bool isActive(IInputAction action)
+{
+    return action.getState() != InputActionState.unactive;
+} 
