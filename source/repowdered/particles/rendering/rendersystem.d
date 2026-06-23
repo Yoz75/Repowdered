@@ -105,7 +105,7 @@ public final class MapRenderSystem
     {
         foreach(i, ref pixel; spriteBuffer)
         {
-            if(i & 1)
+            if(i % 3 == 0)
             {
                 pixel = Color32(0);
             }
