@@ -227,7 +227,7 @@ public final class ShaderBuffer(T)
     }
 
     /// Get internal id of the buffer
-    uint internalId() => glID;
+    @property uint internalId() => glID;
 
     /// Free GPU resources of the buffer
     void free()
