@@ -14,6 +14,7 @@ package void initMechanics(Map map, World world)
     auto movableSystem = new MovableSystem(map);
     auto gravitySystem = new GravitySystem();
     auto powderSystem = new PowderSystem();
+    auto adhesionSystem = new AdhesionSystem();
 
     auto upGravityAction = new KeyboardInputAction(KeyboardKey.up);
     auto downGravityAction = new KeyboardInputAction(KeyboardKey.down);
@@ -27,6 +28,7 @@ package void initMechanics(Map map, World world)
     world.addSystem!MovableSystem(movableSystem);
     world.addSystem!GravitySystem(gravitySystem);
     world.addSystem!PowderSystem(powderSystem);
+    world.addSystem!AdhesionSystem(adhesionSystem);
     world.addSystem!ChangeGravitySystem(changeGravitySystem);
 }
 
@@ -75,12 +77,7 @@ public:
     static VelocityScalar maxVelocity = cast(VelocityScalar) 100;
     /// Current velocity of the particle [x, y] in cells per update
     VelocityScalar[2] velocity = [0, 0];
-}
-
-/// Marks that 
-public struct FallingMarker
-{
-    
+    bool isFalling;
 }
 
 /// A marker component, that indicates that this particle should slip like sand
@@ -182,7 +179,6 @@ package final class MovableSystem
     public ComponentPool!Movable movables;
     private ComponentPool!Position positions;
     private ComponentPool!HollowMarker hollowMarkers;
-    private ComponentPool!FallingMarker fallingMarkers;
     private ComponentPool!UpdateRenderableMarker updateMarkers;
 
     private Map map;
@@ -199,7 +195,6 @@ package final class MovableSystem
         movables = myWorld.getPoolOf!Movable;
         positions = myWorld.getPoolOf!Position;
         hollowMarkers = myWorld.getPoolOf!HollowMarker;
-        fallingMarkers = myWorld.getPoolOf!FallingMarker;
         updateMarkers = myWorld.getPoolOf!UpdateRenderableMarker;
     }
 
@@ -211,7 +206,7 @@ package final class MovableSystem
         Entity entity = movables.dense2Entity(denseId);
         Position currentPosition = positions.getComponent(entity);
 
-        fallingMarkers.addComponent(entity);
+        movable.isFalling = true;
         if(movable.velocity[0] == 0 && movable.velocity[1] == 0) return;
 
         movable.velocity[0] = movable.velocity[0].clamp(cast(VelocityScalar) -Movable.maxVelocity, Movable.maxVelocity);
@@ -226,7 +221,7 @@ package final class MovableSystem
         if(finalPosition == currentPosition)
         {
             movable.velocity = [0, 0];
-            fallingMarkers.removeComponent(entity);
+            movable.isFalling = false;
             return;
         }
 
@@ -235,7 +230,7 @@ package final class MovableSystem
         if(finalPosition != targetPosition)
         {
             movable.velocity = [0, 0];
-            fallingMarkers.removeComponent(entity);
+            movable.isFalling = false;
         }
 
         map.swap(entity, other);
@@ -282,7 +277,6 @@ public final class PowderSystem
     private uint fallDirection;
     private ComponentPool!Powder powders;
     private ComponentPool!Movable movables;
-    private ComponentPool!FallingMarker markers;
 
     /*
            -1 0 1
@@ -303,7 +297,6 @@ public final class PowderSystem
     {
         powders = myWorld.getPoolOf!Powder();
         movables = myWorld.getPoolOf!Movable();
-        markers = myWorld.getPoolOf!FallingMarker();
     }
 
     public void update()
@@ -318,7 +311,7 @@ public final class PowderSystem
     pragma(inline, true)
     private void updateComponent(size_t denseId, ref Powder powder, ref Movable movable)
     {
-        if(markers.hasComponent(powders.dense2Entity(denseId))) return;
+        if(movable.isFalling) return;
 
         //Every odd frame fall to one side and every even to the other
         movable.velocity = biases[GravityMarker.gravity.direction][fallDirection & 1];
@@ -332,7 +325,6 @@ public final class AdhesionSystem
     private uint fallDirection;
     private ComponentPool!Adhesion adhesions;
     private ComponentPool!Movable movables;
-    private ComponentPool!FallingMarker markers;
 
     /*
        -1 0 1
@@ -343,17 +335,16 @@ public final class AdhesionSystem
     immutable static VelocityScalar[2][2][GravityDirection.max + 1] biases = 
     [
         GravityDirection.none: [[0, 0], [0, 0]],
-        GravityDirection.down: [[1, 1], [-1, 1]],
-        GravityDirection.up: [[-1, -1], [1, -1]],
-        GravityDirection.left: [[-1, -1], [-1, 1]],
-        GravityDirection.right: [[1, -1], [1, 1]]
+        GravityDirection.down: [[-1, 0], [1, 0]],
+        GravityDirection.left: [[0, -1], [0, 1]],
+        GravityDirection.right: [[-1, 0], [1, 0]],
+        GravityDirection.up: [[-1, 0], [1, 0]]
     ];
 
     public void start()
     {
         adhesions = myWorld.getPoolOf!Adhesion();
         movables = myWorld.getPoolOf!Movable();
-        markers = myWorld.getPoolOf!FallingMarker();
     }
 
     public void update()
@@ -368,7 +359,7 @@ public final class AdhesionSystem
     pragma(inline, true)
     private void updateComponent(size_t denseId, ref Adhesion adhesion, ref Movable movable)
     {
-        if(markers.hasComponent(adhesions.dense2Entity(denseId))) return;
+        if(movable.isFalling) return;
 
         //Every odd frame fall to one side and every even to the other
         movable.velocity = biases[GravityMarker.gravity.direction][fallDirection & 1];
