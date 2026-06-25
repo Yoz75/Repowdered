@@ -14,7 +14,7 @@ package void initMechanics(Map map, World world)
     auto movableSystem = new MovableSystem(map);
     auto gravitySystem = new GravitySystem();
     auto powderSystem = new PowderSystem();
-    auto adhesionSystem = new AdhesionSystem();
+    auto adhesionSystem = new AdhesionSystem(map);
 
     auto upGravityAction = new KeyboardInputAction(KeyboardKey.up);
     auto downGravityAction = new KeyboardInputAction(KeyboardKey.down);
@@ -325,6 +325,10 @@ public final class AdhesionSystem
     private uint fallDirection;
     private ComponentPool!Adhesion adhesions;
     private ComponentPool!Movable movables;
+    private ComponentPool!Position positions;
+    private ComponentPool!TypeName names;
+
+    Map map;
 
     /*
        -1 0 1
@@ -341,10 +345,17 @@ public final class AdhesionSystem
         GravityDirection.up: [[-1, 0], [1, 0]]
     ];
 
+    public this(Map map)
+    {
+        this.map = map;
+    }
+
     public void start()
     {
         adhesions = myWorld.getPoolOf!Adhesion();
         movables = myWorld.getPoolOf!Movable();
+        positions = myWorld.getPoolOf!Position();
+        names = myWorld.getPoolOf!TypeName();
     }
 
     public void update()
@@ -359,7 +370,15 @@ public final class AdhesionSystem
     pragma(inline, true)
     private void updateComponent(size_t denseId, ref Adhesion adhesion, ref Movable movable)
     {
+        import repowdered.particles.loading : airTypeId;
         if(movable.isFalling) return;
+        Entity entity = adhesions.dense2Entity(denseId);
+
+        auto position = positions.getComponent(entity);
+        position.x += GravityMarker.gravity.vector[0];
+        position.y += GravityMarker.gravity.vector[1];
+
+        if(names.getComponent(map.getAt(position)).name == airTypeId) return;
 
         //Every odd frame fall to one side and every even to the other
         movable.velocity = biases[GravityMarker.gravity.direction][fallDirection & 1];
