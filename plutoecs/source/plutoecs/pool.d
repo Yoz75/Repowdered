@@ -203,15 +203,16 @@ public final class ComponentPool(TComponent)
         ensureSparse(entity);
         if (hasComponent(entity))
         {
-            dense[sparse[entity.id]] = value;
-            return;
+            dense[sparse[entity.id]] = value;            
         }
+        else
+        {
+            auto index = dense.length;
 
-        auto index = dense.length;
-
-        dense ~= value;
-        entities ~= entity;
-        sparse[entity.id] = index;
+            dense ~= value;
+            entities ~= entity;
+            sparse[entity.id] = index;
+        }
 
         foreach (onAddDelegate; onAddDelegates)
         {
@@ -222,6 +223,19 @@ public final class ComponentPool(TComponent)
     /// Removes all components in the pool
     public void removeAll()
     {
+        if(onRemoveDelegates.length > 0)
+        {
+            foreach(i, component; dense)
+            {
+                Entity entity = dense2Entity(i);
+
+                foreach(onRemove; onRemoveDelegates)
+                {
+                    onRemove(entity);
+                }
+            }
+        }
+
         dense.resize(0, TComponent.init);
         entities.resize(0, Entity(EntityId.max));
     }
