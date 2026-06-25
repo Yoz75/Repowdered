@@ -10,8 +10,7 @@
 	"license": "MIT",
 	"targetPath": "./bin/",
 	"dflags": [
-		"-J ./resources/compiletime/",
-		"-g"
+		"-J ./resources/compiletime/"
 	],
 	"name": "repowdered",
 	"copyFiles": [
