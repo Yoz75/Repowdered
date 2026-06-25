@@ -85,10 +85,10 @@ public:
     pragma(inline, true) Entity getAt(Position position)
     {
         if(position.x < 0) position.x = 0;
-        else if(position.x >= resolution[0]) position.x =  cast(PositionScalar)(resolution[0] - 1);
+        else if(position.x >= resolution[0]) position.x = cast(PositionScalar)(resolution[0] - 1);
 
         if(position.y < 0) position.y = 0;
-        else if(position.y >= resolution[1]) position.y =  cast(PositionScalar)(resolution[1] - 1);
+        else if(position.y >= resolution[1]) position.y = cast(PositionScalar)(resolution[1] - 1);
 
         immutable auto index = position.y * resolution[0] + position.x;
         return entities[index];
