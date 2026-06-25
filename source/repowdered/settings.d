@@ -119,8 +119,13 @@ public:
     /// Default button background
     Color32 textColor = Color32(0xFF, 0xFF, 0xBB);
 
+    /// Outline color
     Color32 outline = Color32(0xFF, 0xFF, 0xFF);
+
+    /// Size of the outline
     int outlineSize = 4;
+
+    /// Size of the margin between elements
     int margin = 4;
 }
 
