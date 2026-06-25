@@ -1,10 +1,12 @@
 /// Thermal phenomena
 module repowdered.particles.thermal;
 
-import repowdered.particles.register;
 import repowdered.map;
+import repowdered.particles.register;
+import repowdered.sednapipeline;
 import repowdered.particles.rendering;
 import plutoecs;
+import sednalib;
 import cereslib.jsonutils;
 
 // Number type used for heat and temperature
@@ -92,74 +94,81 @@ public @scomponent struct Convection
     mixin MakeJsonizable;
 public:
 }
-/*
-import kernel.todo;
-mixin TODO!("Currently TemperatureSystem is broken when process ambient heat, fix later!");
-public class TemperatureSystem : System!Temperature
+
+alias TemperatureChangedAction = void delegate(Entity entity);
+/// The system that updates temperatures of all cells
+public final class TemperatureSystem
 {
-    public void delegate(Entity entity)[] onTemperatureChanged;
+    mixin SystemMembers;
+    private TemperatureChangedAction[] onTemperatureChanged;
 
-    private int[2] mapResolution;
+    private ComputeShader temperatureShader;
+    private ShaderBuffer!Temperature valueInSSBO, valueOutSSBO;
 
-    private IComputeShader temperatureShader;
-    private IShaderBuffer valueInSSBO, valueOutSSBO;
-
-    private Temperature[] valueInBuffer;
-    private Temperature[] valueOutBuffer;
+    private shared Temperature[] valueInBuffer;
+    private shared Temperature[] valueOutBuffer;
 
     private ComponentPool!UpdateRenderableMarker markers;
     private ComponentPool!Position positions;
     private ComponentPool!Temperature temperatures;
 
-    public override void onCreated()
+    private Map map;
+
+    public this(Map map)
     {
-        mapResolution = globalMap.resolution();
-
-        markers = currentWorld.getPoolOf!UpdateRenderableMarker;
-        positions = currentWorld.getPoolOf!Position;
-        temperatures = currentWorld.getPoolOf!Temperature;
-
-        onTemperatureChanged ~= (Entity self) 
-        {
-            if(RenderModeSystem.instance.getCurrentRenderModeConverter() == 
-             &temperature2ColorConverter.temperature2Color)
-            {
-                markers.addComponent(self);
-            }
-        };
-
-        assert(RenderModeSystem.instance !is null, "Render mode system is not initialized but we add render mode!!!");
-        RenderModeSystem.instance.addRenderMode(&temperature2ColorConverter.temperature2Color, Keys.two);
-
-        temperatureShader = gameWindow.getNewUninitedComputeShader();
-        temperatureShader.initMe(import("computeShaders/temperature.comp"));
-
-        initSSBOs();
-
-        auto resolutionUniform = temperatureShader.getUniform("resolution", UniformType.vector2i);
-        
-        resolutionUniform.setValue(mapResolution.ptr);
+        this.map = map;
+        temperatureShader = new ComputeShader();
     }
 
+    public void addOnTemperatureChanged(TemperatureChangedAction action)
+    {
+        onTemperatureChanged ~= action;
+    }
+
+    public void start()
+    {
+        markers = myWorld.getPoolOf!UpdateRenderableMarker;
+        positions = myWorld.getPoolOf!Position;
+        temperatures = myWorld.getPoolOf!Temperature;
+
+        temperatureShader = new ComputeShader();
+        SednalibPipeline.addOnceRenderTask(&initGPUStuff);
+    }
+
+    /// Manually read the Temperature component of the `entity` and update entity's temperature
+    /// Params:
+    ///   entity = the entity 
     public void updateTemperatureOf(Entity entity)
     {
         immutable auto mapPos = positions.getComponent(entity).xy;
-
         Temperature[1] resultBuffer;
         resultBuffer[0] = temperatures.getComponent(entity);
 
-        valueInSSBO.update(resultBuffer, cast(uint)((mapPos[0] + mapResolution[0] * mapPos[1]) * Temperature.sizeof));
+        void updateSSBO(Window window)
+        {
+            immutable uint index = cast(uint)(mapPos[0] + map.resolution[0] * mapPos[1]);
+            valueInSSBO.update(resultBuffer, index);
+        }
+
+        SednalibPipeline.addOnceRenderTask(&updateSSBO);
+
+        foreach(action; onTemperatureChanged)
+        {
+            action(entity);
+        }
     }
 
-    protected override void onDestroyed()
+    public void destroyed()
     {
-        valueInSSBO.free();
-        valueOutSSBO.free();
-
-        temperatureShader.free();
+        SednalibPipeline.addOnceRenderTask((window) 
+        {
+            valueInSSBO.free();
+            valueOutSSBO.free();
+            temperatureShader.free();
+        });
     }
 
-    protected override void onAdd(Entity entity)
+    private void onAdd(Entity entity)
     {
         updateTemperatureOf(entity);
         foreach(action; onTemperatureChanged)
@@ -168,11 +177,9 @@ public class TemperatureSystem : System!Temperature
         }
     }
 
-    protected override void onUpdated()
+    public  void update()
     {
-        import powders.timecontrol;
-
-        if(globalGameState != GameState.play)
+        /*if(globalGameState != GameState.play)
         {
             foreach(entity; globalMap)
             {
@@ -183,23 +190,23 @@ public class TemperatureSystem : System!Temperature
             }
 
             return;
-        }
+        }*/
 
-        import kernel.simulation;
         import std.math;
         import std.algorithm.comparison : clamp;
         import std.traits : EnumMembers;
 
-        temperatureShader.execute([mapResolution[0] / Map.chunkSize, mapResolution[1] / Map.chunkSize, 1]);
-        valueOutSSBO.read(valueOutBuffer);
+        SednalibPipeline.addOnceRenderTask(&executeShader);
 
-        foreach(x, y, entity; globalMap)
+        auto data = temperatures.getComponents();
+        foreach(i, temperature; data)
         {
-            auto ref temperature = temperatures.getComponent(entity);
+            Entity entity = temperatures.dense2Entity(i);
+            auto position = positions.getComponent(entity);
 
-            immutable bufferIndex = x + mapResolution[0] * y;
+            immutable bufferIndex = position.x + map.resolution[0] * position.y;
             valueOutBuffer[bufferIndex].value =
-             clamp(valueOutBuffer[bufferIndex].value, Temperature.min, Temperature.max);
+            clamp(valueOutBuffer[bufferIndex].value, Temperature.min, Temperature.max);
 
             temperature = valueOutBuffer[bufferIndex];
             foreach(action; onTemperatureChanged)
@@ -207,159 +214,195 @@ public class TemperatureSystem : System!Temperature
                 action(entity);
             }
         }
+    }
 
-        auto temp = valueInSSBO;
-        valueInSSBO = valueOutSSBO;
-        valueOutSSBO = temp;
+    private void executeShader(Window window)
+    {
+        temperatureShader.execute([map.resolution[0] / Map.chunkSize, map.resolution[1] / Map.chunkSize, 1]);
+
+        synchronized(this)
+        {
+            valueOutSSBO.read(cast(Temperature[]) valueOutBuffer);
+            auto temp = valueInSSBO;
+            valueInSSBO = valueOutSSBO;
+            valueOutSSBO = temp;
+        }        
 
         temperatureShader.detachBuffer(1);
         temperatureShader.detachBuffer(2);
 
-        temperatureShader.attachBuffer(valueInSSBO, 1);
-        temperatureShader.attachBuffer(valueOutSSBO, 2);
+        temperatureShader.attachBuffer(valueInSSBO.internalId, 1);
+        temperatureShader.attachBuffer(valueOutSSBO.internalId, 2);
     }
 
-    pragma(inline, true)
-    private void initSSBOs()
+    /// Init all stuff allocated on GPU
+    private void initGPUStuff(Window window)
     {
-        valueInSSBO = gameWindow.getNewUninitedBuffer();
-        valueOutSSBO = gameWindow.getNewUninitedBuffer();
+        synchronized(this)
+        {
+            valueInSSBO = new ShaderBuffer!Temperature();
+            valueOutSSBO = new ShaderBuffer!Temperature();
 
-        immutable auto mapByteSize = uint(Temperature.sizeof) * mapResolution[0] * mapResolution[1];
-        valueInBuffer = new Temperature[mapResolution[0] * mapResolution[1]];
-        valueInBuffer[] = Temperature.init; // bruh at some reasone default values in the array are not Temperature.init
+            immutable bufferLength = map.resolution[0] * map.resolution[1];
+            valueInBuffer = new shared Temperature[bufferLength];
+            valueInBuffer[] = Temperature.init; // bruh at some reasone default values in the array are not Temperature.init
 
-        valueOutBuffer = new Temperature[mapResolution[0] * mapResolution[1]];
-        
-        valueInSSBO.initMe(mapByteSize, valueInBuffer.ptr, BufferUsageHint.StreamCPU2GPU);
-        valueOutSSBO.initMe(mapByteSize, null, BufferUsageHint.StreamGPU2CPU);
+            valueOutBuffer = new shared Temperature[bufferLength];
+            
+            // this is a synchronized section, we can safely cast shared to unshared
+            valueInSSBO.initMe(bufferLength, cast(Temperature[]) valueInBuffer, BufferUsageHint.StreamCPU2GPU);
+            valueOutSSBO.initMe(bufferLength, null, BufferUsageHint.StreamGPU2CPU);
 
-        temperatureShader.attachBuffer(valueInSSBO, 1);
-        temperatureShader.attachBuffer(valueOutSSBO, 2);
+            temperatureShader.attachBuffer(valueInSSBO.internalId, 1);
+            temperatureShader.attachBuffer(valueOutSSBO.internalId, 2);
+        }
     }
 }
 
-public class DeltaTemperatureSystem : MapEntitySystem!DeltaTemperature
+private final class DeltaTemperatureSystem
 {
+    mixin SystemMembers;
     private ComponentPool!DeltaTemperature deltaTemperatures;
     private ComponentPool!Temperature temperatures;
 
-    public override void onCreated()
+    private IInputAction boostDeltaAction;
+    private TemperatureSystem temperatureSystem;
+
+    public this(IInputAction boostDeltaAction, TemperatureSystem temperatureSystem)
     {
-        deltaTemperatures = currentWorld.getPoolOf!DeltaTemperature;
-        temperatures = currentWorld.getPoolOf!Temperature;
+        this.boostDeltaAction = boostDeltaAction;
     }
 
-    protected override void onAdd(Entity entity)
+    public void start()
     {
-        immutable deltaTime = gameWindow.getDeltaTime();
+        deltaTemperatures = myWorld.getPoolOf!DeltaTemperature;
+        deltaTemperatures.addOnAddAction(&onAdd);
+        
+        temperatures = myWorld.getPoolOf!Temperature;
+    }
+
+    private void onAdd(Entity entity)
+    {
+        immutable deltaTime = GameLoop.getTickTime();
         ref DeltaTemperature delta = deltaTemperatures.getComponent(entity);
         ref Temperature temperature = temperatures.getComponent(entity);
 
-        auto resultDelta = gameWindow.isKeyDown(Keys.leftShift) ? delta.delta * delta.boostMultiplier : delta.delta;
+        auto resultDelta = boostDeltaAction.isActive() ? delta.delta * delta.boostMultiplier : delta.delta;
 
         temperature.value += resultDelta * deltaTime;
-        (cast(TemperatureSystem) TemperatureSystem.instance).updateTemperatureOf(entity);
+        temperatureSystem.updateTemperatureOf(entity);
 
         deltaTemperatures.removeComponent(entity);
     }
 }
 
-public class MeltableSystem : System!Meltable
+public class MeltableSystem
 {
-    import powders.particle.building;
-    import powders.particle.register;
-    import powders.particle.loading;
+    mixin SystemMembers;
+
+    import repowdered.particles.building;
+    import repowdered.particles.register;
+    import repowdered.particles.loading;
 
     private ComponentPool!Meltable meltables;
     private ComponentPool!Temperature temperatures;
 
-    public override void onCreated()
+    public void start()
     {
-        meltables = currentWorld.getPoolOf!Meltable;
-        temperatures = currentWorld.getPoolOf!Temperature;
+        meltables = myWorld.getPoolOf!Meltable;
+        temperatures = myWorld.getPoolOf!Temperature;
     }
 
-    protected override void onUpdated()
+    public void update()
     {
         auto data = meltables.getComponents();
 
         foreach(i, meltable; data)
         {
-            Entity entity = meltables.dense2Entity(currentWorld, i);
+            Entity entity = meltables.dense2Entity(i);
             Temperature temperature = temperatures.getComponent(entity);
 
             if(temperature.value > meltable.criticalTemperature)
             {
                 auto serializedResult = globalTypesDictionary[meltable.resultId];
-                destroyParticle(entity);
-                buildParticle(entity, serializedResult);
+                destroyParticle(myWorld, entity);
+                buildParticle(myWorld, entity, serializedResult);
                 temperatures.addComponent(entity, temperature);
             }
         }
     }
 }
 
-public class SolidableSystem : MapEntitySystem!Solidable
+public class SolidableSystem
 {
-    import powders.particle.building;
-    import powders.particle.register;
-    import powders.particle.loading;
+    mixin SystemMembers;
+
+    import repowdered.particles.building;
+    import repowdered.particles.register;
+    import repowdered.particles.loading;
 
     private ComponentPool!Solidable solidables;
     private ComponentPool!Temperature temperatures;
 
-    public override void onCreated()
+    public void start()
     {
-        solidables = currentWorld.getPoolOf!Solidable;
-        temperatures = currentWorld.getPoolOf!Temperature;
+        solidables = myWorld.getPoolOf!Solidable;
+        temperatures = myWorld.getPoolOf!Temperature;
     }
 
-    protected override void onUpdated()
+    public void update()
     {
         auto data = solidables.getComponents();
 
         foreach(i, meltable; data)
         {
-            Entity entity = solidables.dense2Entity(currentWorld, i);
+            Entity entity = solidables.dense2Entity(i);
             Temperature temperature = temperatures.getComponent(entity);
 
             if(temperature.value > meltable.criticalTemperature)
             {
                 auto serializedResult = globalTypesDictionary[meltable.resultId];
-                destroyParticle(entity);
-                buildParticle(entity, serializedResult);
+                destroyParticle(myWorld, entity);
+                buildParticle(myWorld, entity, serializedResult);
                 temperatures.addComponent(entity, temperature);
             }
         }
     }
 }
 
-public class ConvectionSystem : System!Convection
+public class ConvectionSystem
 {        
-    int[2] mapResolution;
+    import repowdered.particles.meta;
+    import repowdered.particles.mechanics;
+    mixin SystemMembers;
 
-    private TemperatureSystem temperatureSystemInstance;
-
-    private ComponentPool!Convection convectionsPool;
+    public ComponentPool!Convection convectionsPool;
     private ComponentPool!Position positionsPool;
     private ComponentPool!Temperature temperaturesPool;
-    private ComponentPool!Particle particlesPool;
+    private ComponentPool!TypeName particlesPool;
     private ComponentPool!UpdateRenderableMarker markersPool;
 
-    public override void onCreated()
-    {
-        mapResolution = globalMap.resolution();
+    private TemperatureSystem temperatureSystem;
+    private Map map;
 
-        temperatureSystemInstance = cast(TemperatureSystem) TemperatureSystem.instance;
-        convectionsPool = currentWorld.getPoolOf!Convection;
-        positionsPool = currentWorld.getPoolOf!Position;
-        temperaturesPool = currentWorld.getPoolOf!Temperature;
-        particlesPool = currentWorld.getPoolOf!Particle;
-        markersPool = currentWorld.getPoolOf!UpdateRenderableMarker;
+    private ubyte rawMoveOffset;
+    
+    public this(TemperatureSystem temperatureSystem, Map map)
+    {
+        this.temperatureSystem = temperatureSystem;
+        this.map = map;
     }
 
-    immutable(int[2][GravityDirection]) gravity2convection = 
+    public void start()
+    {
+        convectionsPool = myWorld.getPoolOf!Convection;
+        positionsPool = myWorld.getPoolOf!Position;
+        temperaturesPool = myWorld.getPoolOf!Temperature;
+        particlesPool = myWorld.getPoolOf!TypeName;
+        markersPool = myWorld.getPoolOf!UpdateRenderableMarker;
+    }
+
+    immutable static PositionScalar[2][GravityDirection.max + 1] gravity2convection = 
     [
         GravityDirection.down: [0, -1],
         GravityDirection.up: [0, 1],
@@ -368,149 +411,53 @@ public class ConvectionSystem : System!Convection
         GravityDirection.none: [0, 0]
     ];
 
-    protected override void onUpdated()
+    public void update()
     {
-        import powders.timecontrol;
-        static ubyte rawMoveOffset;
+        if(GameLoop.timeScale <= 0) return;
+        if(GravityMarker.gravity.direction == GravityDirection.none) return;
 
-        if(globalGameState != GameState.play) return;
-        if(Gravity.direction == GravityDirection.none) return;
-
-        Convection[] convections = convectionsPool.getComponents();
-
-        foreach(i, convection; convections)
-        {
-            Entity entity = convectionsPool.dense2Entity(currentWorld, i);
-            immutable Position position = positionsPool.getComponent(entity);
-
-            immutable int[2] gravityDirection = gravity2convection[Gravity.direction];
-
-            // `-1` part converts ofsset from [0..2] to [-1.1]
-            immutable int moveOffset = (rawMoveOffset % 3) - 1;
-            immutable int[2] gravityPerpendicular = [gravityDirection[1], -gravityDirection[0]];
-            immutable int[2] upperPos = position.xy[] + gravityDirection[] + gravityPerpendicular[] * moveOffset;
-            
-            if(!globalMap.isInBounds(upperPos)) continue;
-            Entity upper = globalMap.getAt!false(upperPos);
-            if(!convectionsPool.hasComponent(upper)) continue;
-
-            immutable areSameType =
-                particlesPool.getComponent(entity).typeId == particlesPool.getComponent(entity).typeId;
-            
-            immutable Temperature selfTemperature = temperaturesPool.getComponent(entity);
-            immutable Temperature upperTemperature = temperaturesPool.getComponent(upper);
-
-            immutable bool isThermalConvectionSuitable = 
-                selfTemperature.value > upperTemperature.value && areSameType;
-
-            if(isThermalConvectionSuitable)
-            {
-                globalMap.swap(entity, upper);
-            }
-            else continue;
-
-            temperatureSystemInstance.updateTemperatureOf(entity);
-            temperatureSystemInstance.updateTemperatureOf(upper);
-
-            markersPool.addComponent(entity);
-            markersPool.addComponent(upper);
-        }
-
+        forEach!convectionsPool(&updateComponent);
         rawMoveOffset++;
     }
-}
 
-package final class Temperature2ColorConverter
-{
-    import davincilib.color;
-    private ComponentPool!Temperature temperatures;
-
-    public this(World world)
+    private void updateComponent(size_t denseId, ref Convection convection)
     {
-        import kernel.simulation;
-        temperatures = world.getPoolOf!Temperature;
-    }
+        Entity entity = convectionsPool.dense2Entity(denseId);
+        immutable Position position = positionsPool.getComponent(entity);
 
-    public Color temperature2Color(Entity entity)
-    {
-        import kernel.math;
+        immutable PositionScalar[2] gravityDirection = gravity2convection[GravityMarker.gravity.direction];
 
-        /// Maximal temperature, that rendered as a red color. Temperatures above this value are rendered as hot.
-        enum minColdTemperature = Temperature.min;
-        enum maxWarmTemperature = 100;
-        enum maxVeryWarmTemperature = 1000;
-        enum maxLittleHotTemperature = 2000;
-        enum maxHotTemperature = 3000;
-        enum maxVeryHotTemperature = 4000;
+        // `-1` part converts ofsset from [0..2] to [-1.1]
+        immutable int moveOffset = (rawMoveOffset % 3) - 1;
+        immutable PositionScalar[2] gravityPerpendicular = [gravityDirection[1], -gravityDirection[0]].toPS;
 
-        enum coldColor = blue;
-        enum zeroColor = black;
-        enum warmColor = green;
-        enum veryWarmColor = red;
-        enum littleHotColor = Color(230, 200, 0);
-        enum hotColor = Color(255, 255, 0);
-        enum veryHotColor = white;
-        enum maxColor = white;
+        immutable PositionScalar[2] rawUpperPos 
+         = position.xy[] + gravityDirection[] + gravityPerpendicular[] * moveOffset;
 
-        immutable auto temperature = temperatures.getComponent(entity).value;
-        Color color;
+        immutable Position upperPos = Position(rawUpperPos[0], rawUpperPos[1]);
         
-        if(temperature < 0)
+        immutable upperEntity = map.tryGetAt(upperPos);
+        if(!upperEntity.hasValue) return;
+        if(!convectionsPool.hasComponent(upperEntity.value)) return;
+
+        immutable areSameType = particlesPool.getComponent(entity) == particlesPool.getComponent(upperEntity.value);
+        
+        immutable Temperature selfTemperature = temperaturesPool.getComponent(entity);
+        immutable Temperature upperTemperature = temperaturesPool.getComponent(upperEntity.value);
+
+        immutable bool isThermalConvectionSuitable = 
+            selfTemperature.value > upperTemperature.value && areSameType;
+
+        if(isThermalConvectionSuitable)
         {
-            immutable float normalized = remap!TemperatureScalar(temperature, 0, minColdTemperature, 0, 1);
-            color = lerp(zeroColor, coldColor, normalized);
+            map.swap(entity, upperEntity.value);
         }
-        if(temperature >= 0)
-        {
-            if(temperature < maxWarmTemperature)
-            {
-                immutable float normalized = remap!TemperatureScalar(temperature, 0, maxWarmTemperature, 0, 1);
-                color = lerp(zeroColor, warmColor, normalized);
-            }
-            else if(temperature < maxVeryWarmTemperature)
-            {
-                immutable float normalized =
-                    remap!TemperatureScalar(temperature, maxWarmTemperature, maxVeryWarmTemperature, 0, 1);
+        else return;
 
-                color = lerp(warmColor, veryWarmColor, normalized);
-            }
-            else if(temperature < maxLittleHotTemperature)
-            {
-                immutable float normalized =
-                    remap!TemperatureScalar(temperature, maxVeryWarmTemperature, maxLittleHotTemperature, 0, 1);
+        temperatureSystem.updateTemperatureOf(entity);
+        temperatureSystem.updateTemperatureOf(upperEntity.value);
 
-                color = lerp(veryWarmColor, littleHotColor, normalized);
-            }
-            else if(temperature < maxHotTemperature)
-            {
-                immutable float normalized =
-                    remap!TemperatureScalar(temperature, maxLittleHotTemperature, maxHotTemperature, 0, 1);
-
-                color = lerp(littleHotColor, hotColor, normalized);
-            }
-            else if(temperature < maxVeryHotTemperature)
-            {
-                immutable float normalized = 
-                    remap!TemperatureScalar(temperature, maxHotTemperature, maxVeryHotTemperature, 0, 1);
-
-                color = lerp(hotColor, veryHotColor, normalized);
-            }
-            else color = maxColor;
-        }
-
-        return color;
+        markersPool.addComponent(entity);
+        markersPool.addComponent(upperEntity.value);
     }
 }
-
-import std.traits : isNumeric;
-public pure Color lerp(T)(immutable Color from, immutable Color to, immutable T lerpFactor) if (isNumeric!T)
-{
-    Color result;
-
-    result.r = cast(ubyte)(from.r + (to.r - from.r) * lerpFactor);
-    result.g = cast(ubyte)(from.g + (to.g - from.g) * lerpFactor);
-    result.b = cast(ubyte)(from.b + (to.b - from.b) * lerpFactor);
-    result.a = cast(ubyte)(from.a + (to.a - from.a) * lerpFactor);
-
-    return result;
-}*/
