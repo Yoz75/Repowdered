@@ -94,6 +94,8 @@ public:
 public:
     /// The slipperiness of particle in range 0..1
     @JsonizeField float adhesion = 1;
+    /// How much cells per movement particle wants to go?
+    @JsonizeField ubyte liquidness = 2;
 }
 
 /// A particle, that can turn into `result` when hits `other`
@@ -371,6 +373,8 @@ public final class AdhesionSystem
     private void updateComponent(size_t denseId, ref Adhesion adhesion, ref Movable movable)
     {
         import repowdered.particles.loading : airTypeId;
+        import std.random;
+
         if(movable.isFalling) return;
         Entity entity = adhesions.dense2Entity(denseId);
 
@@ -382,5 +386,17 @@ public final class AdhesionSystem
 
         //Every odd frame fall to one side and every even to the other
         movable.velocity = biases[GravityMarker.gravity.direction][fallDirection & 1];
+
+        immutable bool behaveAsLiquid = adhesion.adhesion <= 0 || uniform01() >= adhesion.adhesion;
+        
+        if(behaveAsLiquid)
+        {
+            enum biasesLength = 2;
+            enum ubyte one = 1; // bruh
+            movable.velocity = biases[GravityMarker.gravity.direction][uniform(0, biasesLength)];
+
+            immutable multiplier = uniform!("[)", ubyte, ubyte)(one, adhesion.liquidness);
+            movable.velocity[] *= multiplier;
+        }
     }
 }
