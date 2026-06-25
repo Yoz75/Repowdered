@@ -12,6 +12,7 @@ public void initSettings()
     loadMapSettings();
     loadCameraSettings();
     loadUISettings();
+    loadSimulationSettings();
 }
 
 // Private now, but if I'll want to add mods support this probably should be public (and we should somehow export public symbols, but it's far far future)
@@ -43,6 +44,12 @@ private void loadUISettings()
 {
     enum fileName = "ui.json";
     loadSettings!(fileName, UISettings, Settings.uiSettings)();
+}
+
+private void loadSimulationSettings()
+{
+    enum fileName = "simulation.json";
+    loadSettings!(fileName, SimulationSettings, Settings.simulationSettings)();
 }
 
 /// The map settings
@@ -129,6 +136,16 @@ public:
     int margin = 4;
 }
 
+/// Settings of the simulation
+public struct SimulationSettings
+{
+    mixin MakeJsonizable;
+public:
+@JsonizeField:
+
+    double targetTPS = 60;
+}
+
 /// The Repowdered settings. These are changeeable from in-game settings button
 public final abstract class Settings
 {
@@ -145,4 +162,7 @@ __gshared:
 
     /// Settings of the game UI
     UISettings uiSettings;
+
+    /// Settings of the simulation
+    SimulationSettings simulationSettings;
 }

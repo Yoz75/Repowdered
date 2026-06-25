@@ -70,6 +70,8 @@ private void startGameScene()
     initTimeControl(gameWorld);   
 
     fillMapWithDefaultType(gameWorld, map);
+
+    GameLoop.setMaxTPS(Settings.simulationSettings.targetTPS);
     GameLoop.run(gameWorld);
 }
 
