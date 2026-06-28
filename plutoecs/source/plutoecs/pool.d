@@ -295,7 +295,8 @@ public final class ComponentPool(TComponent)
 
         if(idx == EntityId.max)
         {
-            throw new Exception("Component does not exists!");
+            import std.conv : to;
+            throw new Exception("Entity " ~ entity.id.to!string ~ " does not have component " ~ TComponent.stringof);
         }
 
         return dense.data[idx];
