@@ -4,7 +4,7 @@ import repowdered.sednapipeline;
 import repowdered.settings;
 import repowdered.map;
 import repowdered.particles.register;
-import repowdered.particles.rendering.updaters;
+import repowdered.particles.rendering.renderers;
 import repowdered.particles.rendering.components;
 import sednalib;
 import plutoecs;

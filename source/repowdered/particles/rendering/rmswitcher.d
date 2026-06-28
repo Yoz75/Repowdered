@@ -1,6 +1,6 @@
 module repowdered.particles.rendering.rmswitcher;
 
-import repowdered.particles.rendering.updaters;
+import repowdered.particles.rendering.renderers;
 import repowdered.particles.rendering.rendersystem;
 import sednalib.input;
 import plutoecs;

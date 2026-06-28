@@ -3,7 +3,7 @@ module repowdered.particles.rendering;
 public import repowdered.particles.rendering.rendersystem;
 public import repowdered.particles.rendering.components;
 public import repowdered.particles.rendering.rmswitcher;
-public import repowdered.particles.rendering.updaters;
+public import repowdered.particles.rendering.renderers;
 
 import repowdered.map;
 import plutoecs;

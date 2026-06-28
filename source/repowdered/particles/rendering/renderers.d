@@ -1,4 +1,4 @@
-module repowdered.particles.rendering.updaters;
+module repowdered.particles.rendering.renderers;
 
 import repowdered.sednapipeline;
 import repowdered.particles.rendering.components;
