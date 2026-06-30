@@ -53,6 +53,11 @@ public final class MapRenderSystem
         shader.free();
     }
 
+    public @property IRenderModeRenderer currentRenderMode()
+    {
+        return renderer;
+    }
+
     public ref Sprite getMapSprite()
     {
         return sprite;
@@ -64,6 +69,7 @@ public final class MapRenderSystem
     public void setRenderMode(IRenderModeRenderer renderMode)
     {
         assert(renderMode !is null, "render mode is null!");
+
         this.renderer = renderMode;
     }
 
@@ -72,7 +78,6 @@ public final class MapRenderSystem
     {
         foreach(entity; map)
         {
-            renderables.addComponent(entity);
             markers.addComponent(entity);
         }
     }

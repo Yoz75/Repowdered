@@ -220,19 +220,31 @@ public final class ComponentPool(TComponent)
         }
     }
 
-    /// Removes all components in the pool
     public void removeAll()
     {
-        if(onRemoveDelegates.length > 0)
-        {
-            foreach(i, component; dense)
-            {
-                Entity entity = dense2Entity(i);
+        if (dense.length == 0)
+            return;
 
-                foreach(onRemove; onRemoveDelegates)
+        if (onRemoveDelegates.length > 0)
+        {
+            foreach (index; 0..dense.length)
+            {
+                Entity entity = entities[index];
+
+                sparse[entity.id] = size_t.max;
+
+                foreach (onRemove; onRemoveDelegates)
                 {
                     onRemove(entity);
                 }
+            }
+        }
+        else
+        {
+            foreach (index, _; dense)
+            {
+                Entity entity = dense2Entity(index);
+                sparse[entity.id] = size_t.max;
             }
         }
 

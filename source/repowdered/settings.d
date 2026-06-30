@@ -139,10 +139,12 @@ public:
 /// Settings of the simulation
 public struct SimulationSettings
 {
+    import repowdered.particles.thermal : TemperatureScalar;
     mixin MakeJsonizable;
 public:
 @JsonizeField:
 
+    /// Tarket count of simulation ticks per second
     double targetTPS = 60;
 }
 

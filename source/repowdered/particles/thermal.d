@@ -9,8 +9,41 @@ import plutoecs;
 import sednalib;
 import cereslib.jsonutils;
 
+public void initThermal(Map map, World world)
+{
+    auto temperatures = world.getPoolOf!Temperature;
+    foreach(entity; map)
+    {
+        temperatures.addComponent(entity);
+    }
+
+    auto temperatureSystem = new TemperatureSystem(map);
+
+    auto boostAction = new KeyboardInputAction(KeyboardKey.leftShift);
+    auto deltaSystem = new DeltaTemperatureSystem(boostAction, temperatureSystem);
+
+    world.addSystem!DeltaTemperatureSystem(deltaSystem);
+    world.addSystem!TemperatureSystem(temperatureSystem);
+}
+
 // Number type used for heat and temperature
 alias TemperatureScalar = float;
+
+/// A kostyl to add opportunity to change particle's temperature
+@scomponent struct TemperatureInfo
+{
+mixin MakeJsonizable;
+public:
+@JsonizeField:
+
+    /*
+        Uninitialized values mean that this value should be default
+    */
+
+    TemperatureScalar heatCapacity;
+    TemperatureScalar transferCoefficient;
+    TemperatureScalar value;
+}
 
 public pure TemperatureScalar conductivity2coefficient(TemperatureScalar conductivity, 
     TemperatureScalar scale, TemperatureScalar maxConductivity)
@@ -20,10 +53,8 @@ public pure TemperatureScalar conductivity2coefficient(TemperatureScalar conduct
     return(log(1 + scale * conductivity)) / (log(scale * maxConductivity));
 }
 
-@scomponent public struct Temperature
+public struct Temperature
 {
-    mixin MakeJsonizable;
-
 public:
     enum TemperatureScalar min = -273.15;
     enum TemperatureScalar max = 100_000;
@@ -48,7 +79,7 @@ public:
     /// Temperature of a particle in degrees Celsius
     TemperatureScalar value = defaultTemperature; 
 
-    @JsonizeField this(TemperatureScalar value, TemperatureScalar heatCapacity, 
+    this(TemperatureScalar value, TemperatureScalar heatCapacity, 
     TemperatureScalar thermalConductivity = defaultConductivity)
     {
         import std.math;
@@ -95,6 +126,36 @@ public @scomponent struct Convection
 public:
 }
 
+public final class TemperatureInfoSystem
+{
+    mixin SystemMembers;
+    private ComponentPool!TemperatureInfo infos;
+    private ComponentPool!Temperature temperatures;
+
+    public void start()
+    {
+        infos = myWorld.getPoolOf!TemperatureInfo;
+        infos.addOnAddAction(&onAdd);
+    }
+
+    private void onAdd(Entity entity)
+    {
+        TemperatureInfo info = infos.getComponent(entity);
+        ref temperature = temperatures.getComponent(entity);
+
+        auto heatCapacity = info.heatCapacity == TemperatureScalar.init ?
+         Temperature.init.heatCapacity : info.heatCapacity;
+
+        auto value = info.value == TemperatureScalar.init ?
+         Temperature.init.value : info.value;
+
+        auto transferCoefficient = info.transferCoefficient == TemperatureScalar.init ?
+         Temperature.init.transferCoefficient : info.transferCoefficient;
+
+        temperature = Temperature(value, heatCapacity, transferCoefficient);
+    }
+}
+
 alias TemperatureChangedAction = void delegate(Entity entity);
 /// The system that updates temperatures of all cells
 public final class TemperatureSystem
@@ -113,11 +174,11 @@ public final class TemperatureSystem
     private ComponentPool!Temperature temperatures;
 
     private Map map;
+    private shared bool isSharderExecuted;
 
     public this(Map map)
     {
         this.map = map;
-        temperatureShader = new ComputeShader();
     }
 
     public void addOnTemperatureChanged(TemperatureChangedAction action)
@@ -130,8 +191,12 @@ public final class TemperatureSystem
         markers = myWorld.getPoolOf!UpdateRenderableMarker;
         positions = myWorld.getPoolOf!Position;
         temperatures = myWorld.getPoolOf!Temperature;
+        temperatures.addOnAddAction(&onAdd);
 
         temperatureShader = new ComputeShader();
+        valueInSSBO = new ShaderBuffer!Temperature();
+        valueOutSSBO = new ShaderBuffer!Temperature();
+
         SednalibPipeline.addOnceRenderTask(&initGPUStuff);
     }
 
@@ -179,19 +244,6 @@ public final class TemperatureSystem
 
     public  void update()
     {
-        /*if(globalGameState != GameState.play)
-        {
-            foreach(entity; globalMap)
-            {
-                foreach(action; onTemperatureChanged)
-                {
-                    action(entity);
-                }
-            }
-
-            return;
-        }*/
-
         import std.math;
         import std.algorithm.comparison : clamp;
         import std.traits : EnumMembers;
@@ -199,7 +251,7 @@ public final class TemperatureSystem
         SednalibPipeline.addOnceRenderTask(&executeShader);
 
         auto data = temperatures.getComponents();
-        foreach(i, temperature; data)
+        foreach(i, ref temperature; data)
         {
             Entity entity = temperatures.dense2Entity(i);
             auto position = positions.getComponent(entity);
@@ -208,11 +260,14 @@ public final class TemperatureSystem
             valueOutBuffer[bufferIndex].value =
             clamp(valueOutBuffer[bufferIndex].value, Temperature.min, Temperature.max);
 
-            temperature = valueOutBuffer[bufferIndex];
+            temperature = valueOutBuffer[bufferIndex];            
+
             foreach(action; onTemperatureChanged)
             {
                 action(entity);
             }
+
+            markers.addComponent(entity);
         }
     }
 
@@ -223,9 +278,18 @@ public final class TemperatureSystem
         synchronized(this)
         {
             valueOutSSBO.read(cast(Temperature[]) valueOutBuffer);
-            auto temp = valueInSSBO;
-            valueInSSBO = valueOutSSBO;
-            valueOutSSBO = temp;
+
+            {
+                auto temp = valueInSSBO;
+                valueInSSBO = valueOutSSBO;
+                valueOutSSBO = temp;
+            }
+
+            {
+                auto temp = valueInBuffer;
+                valueInBuffer = valueOutBuffer;
+                valueOutBuffer = temp;
+            }
         }        
 
         temperatureShader.detachBuffer(1);
@@ -233,20 +297,23 @@ public final class TemperatureSystem
 
         temperatureShader.attachBuffer(valueInSSBO.internalId, 1);
         temperatureShader.attachBuffer(valueOutSSBO.internalId, 2);
+        isSharderExecuted = true;
     }
 
     /// Init all stuff allocated on GPU
     private void initGPUStuff(Window window)
     {
+        enum shaderCode = import("shaders/compute/temperature.comp");
+
         synchronized(this)
         {
-            valueInSSBO = new ShaderBuffer!Temperature();
-            valueOutSSBO = new ShaderBuffer!Temperature();
+            temperatureShader.initMe(shaderCode);
+            auto resolutionUniform = temperatureShader.createUniform("resolution", UniformType.vector2i);
+            int[2] resolution = [map.resolution[0], map.resolution[1]];
+            resolutionUniform.setValue(&resolution);
 
             immutable bufferLength = map.resolution[0] * map.resolution[1];
             valueInBuffer = new shared Temperature[bufferLength];
-            valueInBuffer[] = Temperature.init; // bruh at some reasone default values in the array are not Temperature.init
-
             valueOutBuffer = new shared Temperature[bufferLength];
             
             // this is a synchronized section, we can safely cast shared to unshared
@@ -271,6 +338,7 @@ private final class DeltaTemperatureSystem
     public this(IInputAction boostDeltaAction, TemperatureSystem temperatureSystem)
     {
         this.boostDeltaAction = boostDeltaAction;
+        this.temperatureSystem = temperatureSystem;
     }
 
     public void start()

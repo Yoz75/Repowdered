@@ -16,7 +16,7 @@ public void initRendering(Map map, World world)
     auto defaultRenderMode = new ColorRenderer(resolution);
 
     auto mrSystem = new MapRenderSystem(map);
-    mrSystem.setRenderMode( defaultRenderMode);
+    mrSystem.setRenderMode(defaultRenderMode);
 
     auto rmsSystem = new RenderModeSwitcherSystem(mrSystem);
 
@@ -31,7 +31,11 @@ private void addRenderModes(Map map, RenderModeSwitcherSystem rmsSystem)
     int[2] resolution = [map.resolution[0], map.resolution[1]];
 
     auto colorRenderMode = new ColorRenderer(resolution);
+    auto thermalRenderMode = new ThermalRenderer(resolution);
+
     auto colorRenderModeAction = new KeyboardInputAction(KeyboardKey.one);
+    auto thermalRenderMdoeAction = new KeyboardInputAction(KeyboardKey.two);
 
     rmsSystem.addRenderMode(colorRenderMode, colorRenderModeAction);
+    rmsSystem.addRenderMode(thermalRenderMode, thermalRenderMdoeAction);
 }

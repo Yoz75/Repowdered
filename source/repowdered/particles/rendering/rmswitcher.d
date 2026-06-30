@@ -45,6 +45,7 @@ public final class RenderModeSwitcherSystem
             if(renderMode.inputAction.getState() != InputActionState.unactive)
             {
                 renderSystem.setRenderMode(renderMode.updater);
+                renderSystem.scheduleUpdatingWholeSprite();
             }
         }
     }
