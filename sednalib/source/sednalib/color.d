@@ -1,4 +1,5 @@
 module sednalib.color;
+import std.traits : isNumeric;
 import jsonizer;
 
 /// Stores color in RGBA format
@@ -46,6 +47,18 @@ public string toHexString(bool addSharp = false)(Color32 color)
     }
 }
 
+public Color32 lerp(T)(inout Color32 from, inout Color32 to, inout T lerpFactor) pure if (isNumeric!T)
+{
+    Color32 result;
+
+    result.r = cast(ubyte)(from.r + (to.r - from.r) * lerpFactor);
+    result.g = cast(ubyte)(from.g + (to.g - from.g) * lerpFactor);
+    result.b = cast(ubyte)(from.b + (to.b - from.b) * lerpFactor);
+    result.a = cast(ubyte)(from.a + (to.a - from.a) * lerpFactor);
+
+    return result;
+}
+
 unittest
 {
     enum Color32 white =  Color32(255, 255, 255);
@@ -63,4 +76,13 @@ unittest
         assert(yellowString == "FF00FFFF");
         assert(yellowStringSharp == "#FF00FFFF");
     }
+}
+
+unittest
+{
+    Color32 a = Color32(200, 100, 0);
+    Color32 b = Color32(0, 0, 50);
+
+    Color32 c = lerp(a, b, 0.5);
+    assert(c == Color32(100, 50, 25, 255));
 }
