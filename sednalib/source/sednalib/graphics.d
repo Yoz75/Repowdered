@@ -239,10 +239,13 @@ public final class ShaderBuffer(T)
     /// Update SSBO buffer's value.
     /// Params:
     /// data = the new data
-    /// offset = ofset of data
-    void update (void[] data, uint offset = 0)
+    /// startIndex = the start index of updating
+    void update (T[] data, uint startIndex = 0)
     {
-        rlUpdateShaderBuffer(glID, data.ptr, cast(uint) data.length, offset);  
+        immutable byteSize = cast(uint) (data.length * T.sizeof);
+        immutable byteOffset = cast(uint) (startIndex * T.sizeof);
+
+        rlUpdateShaderBuffer(glID, cast(void*) data.ptr, byteSize, byteOffset);
         checkErrors();
     }
 
