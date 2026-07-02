@@ -1,4 +1,4 @@
-module repowdered.particles.creating.shapecontroller;
+module repowdered.particles.creating.shapeformer;
 
 import repowdered.particles.rendering;
 import repowdered.particles.creating.shapes;
@@ -6,8 +6,8 @@ import repowdered.particles.creating.shapeselector;
 import plutoecs;
 import sednalib;
 
-
-public final class ShapeControllerSystem
+/// Controls the shape's form
+public final class ShapeFormControllerSystem
 {
     mixin SystemMembers;
 
@@ -27,16 +27,9 @@ public final class ShapeControllerSystem
     public void update()
     {
         IShape currentShape = shapeSelector.getSelectedShape();
-
-        immutable float[2] mouseWorldPos = screen2WorldPosition(Mouse.getPosition());
-        immutable int[2] pos = world2SpritePosition(mapRenderer.getMapSprite(), mouseWorldPos);
-        if(pos[0] < 0 || pos[1] < 0) return;
-
-        currentShape.markBorders(pos);
-        
         immutable shapeScale = currentShape.getScale();
-
         immutable float resizeAxis = resizeAction.getAxis();
+
         if(resizeAxis > 0 && resizeAvailableAction.getState() != InputActionState.unactive)
         {
             currentShape.setScale(shapeScale + 1);

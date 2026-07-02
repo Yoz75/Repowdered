@@ -2,7 +2,7 @@ module repowdered.particles.creating;
 
 public import repowdered.particles.creating.spawner;
 public import repowdered.particles.creating.shapeselector;
-public import repowdered.particles.creating.shapecontroller;
+public import repowdered.particles.creating.shapeformer;
 public import repowdered.particles.creating.shapes;
 public import repowdered.particles.creating.ui;
 import repowdered.map;
@@ -22,14 +22,14 @@ public void initParticleCreating(Map map, World world, MapRenderSystem renderSys
 
     auto shapeSelector = new ShapeSelectorSystem(map, nextKeyAction, shapes);
 
-    auto shapeController = new ShapeControllerSystem(resizeAvailableAction, resizeAction, shapeSelector, renderSystem);
+    auto shapeFormer = new ShapeFormControllerSystem(resizeAvailableAction, resizeAction, shapeSelector, renderSystem);
 
     auto particleSpawner 
      = new ParticleSpawnerSystem(shapeSelector, renderSystem, 
      new MouseButtonInputAction(MouseButton.left), new MouseButtonInputAction(MouseButton.right));
 
     world.addSystem!ShapeSelectorSystem(shapeSelector);
-    world.addSystem!ShapeControllerSystem(shapeController);
+    world.addSystem!ShapeFormControllerSystem(shapeFormer);
     world.addSystem!ParticleSpawnerSystem(particleSpawner);
 
     initUICreating(world, particleSpawner);

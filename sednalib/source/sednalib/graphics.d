@@ -492,7 +492,7 @@ public int[2] world2SpritePosition(in Sprite sprite, in float[2] position)
 
     if (tx < 0 || ty < 0 || tx >= sprite.texture.width || ty >= sprite.texture.height)
         return [-1, -1];
-    return [cast(int) tx, cast(int) ty];
+    return [cast(int) tx.round, cast(int) ty.round];
 }
 
 /// Convert screen position to corresponding world position
