@@ -138,14 +138,16 @@ public:
             neighborPosition.x += x;
             neighborPosition.y += y;
 
-            auto optional = tryGetAt(position);
+            auto optional = tryGetAt(neighborPosition);
             if(!optional.hasValue)
             {
                 result.entities[index] = Entity.invalid;
-                continue;
+                goto LEnd;
             }
             
             result.entities[index] = optional.value;
+
+            LEnd:
             index++;
         }
 
