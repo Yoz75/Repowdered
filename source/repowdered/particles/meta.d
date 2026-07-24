@@ -10,9 +10,9 @@ public struct TypeName // Remember: components without @Component attribute don'
     mixin MakeJsonizable;
 public:
     /// The name of the particle type. For example, Repowdered.FLuids.Water
-    string name;
+    @JsonizeField string name;
 
-    bool opEquals(const TypeName other) const
+    bool opEquals(inout TypeName other) inout
     {
         return name == other.name;
     }
