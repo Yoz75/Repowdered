@@ -178,10 +178,3 @@ public SerializedParticleType getAirType()
     assert(airType !is null, "At some reason getAirType() called before air component registered!");
     return globalTypesDictionary[airTypeId];
 }
-
-public SerializedParticleType getBorderType()
-{
-    auto borderType = borderTypeId in globalTypesDictionary;
-    assert(borderType !is null, "At some reason getBorderType() called before border component registered!");
-    return globalTypesDictionary[airTypeId];
-}
