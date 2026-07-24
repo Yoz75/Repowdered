@@ -384,16 +384,21 @@ public final class AdhesionSystem
 
         if(names.getComponent(map.getAt(position)).name == airTypeId) return;
 
-        //Every odd frame fall to one side and every even to the other
-        movable.velocity = biases[GravityMarker.gravity.direction][fallDirection & 1];
+        VelocityScalar[2][2] resultBiases;
 
-        immutable bool behaveAsLiquid = adhesion.adhesion <= 0 || uniform01() >= adhesion.adhesion;
-        
-        if(behaveAsLiquid)
+        if(uniform01() >= adhesion.adhesion)
         {
-            enum biasesLength = 2;
-            enum ubyte one = 1; // bruh
-            movable.velocity = biases[GravityMarker.gravity.direction][uniform(0, biasesLength)];
+            resultBiases = biases[GravityMarker.gravity.direction];
+        }
+        else
+        {
+            resultBiases = [0, 0];
+        }
+
+        movable.velocity = resultBiases[uniform(0, 2)];
+        movable.velocity[] *= adhesion.liquidness;
+    }
+}
 
             immutable multiplier = uniform!("[)", ubyte, ubyte)(one, adhesion.liquidness);
             movable.velocity[] *= multiplier;
