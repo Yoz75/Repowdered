@@ -19,7 +19,7 @@ alias JsonizeField = jsonize;
 public mixin template MakeJsonizable()
 {
     public import jsonizer;
-    mixin JsonizeMe;
+    mixin JsonizeMe!(JsonizeIgnoreExtraKeys.no);
 }
 
 /// Load an instance of `T` from file
