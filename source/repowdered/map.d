@@ -37,6 +37,23 @@ public struct Position
     }
 }
 
+public struct Neighbors
+{
+    union
+    {
+        Entity leftUpper;
+        Entity upper;
+        Entity rightUpper;
+        Entity left;
+        Entity right;
+        Entity leftDown;
+        Entity down;
+        Entity rightDown;
+
+        Entity[8] entities;
+    }
+}
+
 /// This class represents the structure of Repowdered world (cellular automaton's grid)
 public final class Map
 {
@@ -101,6 +118,38 @@ public:
 
         immutable auto index = position.y * resolution[0] + position.x;
         return Optional!Entity(entities[index]);
+    }
+
+    /// Get neighbors of entity at `position`. If there is no nehgbor at position, it will be Entity(EntityId.max).
+    /// Params:
+    ///   position = the position of central entity
+    /// Returns: `Neighbors` instance
+    pragma(inline, true) Neighbors getNeighborsAt(Position position)
+    {
+        Neighbors result;
+        result.entities[] = Entity.invalid;
+        
+        int index;
+        foreach(y; -1..2)
+        foreach(x; -1..2)
+        {
+            if(x == 0 && y == 0) continue;
+            Position neighborPosition = position;
+            neighborPosition.x += x;
+            neighborPosition.y += y;
+
+            auto optional = tryGetAt(position);
+            if(!optional.hasValue)
+            {
+                result.entities[index] = Entity.invalid;
+                continue;
+            }
+            
+            result.entities[index] = optional.value;
+            index++;
+        }
+
+        return result;
     }
 
     /// Swap two entities on the map and update their Position components
